@@ -95,8 +95,42 @@
                                             Padding="8" 
                                             CornerRadius="5" 
                                             Background="Transparent">
+
+                                        <Border.ContextMenu>
+                                            <ContextMenu Background="#252526" BorderBrush="#333" Foreground="White">
+
+                                                <ContextMenu.Style>
+                                                    <Style TargetType="ContextMenu">
+                                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding IsHistoryItem}" Value="True">
+                                                                <Setter Property="Visibility" Value="Visible"/>
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </ContextMenu.Style>
+
+                                                <MenuItem Header="Rename" Click="Rename_Click">
+                                                    <MenuItem.Style>
+                                                        <Style TargetType="MenuItem">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding IsHistoryFile}" Value="True">
+                                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </MenuItem.Style>
+                                                </MenuItem>
+
+                                                <MenuItem Header="Delete" Click="Delete_Click" Foreground="#FF5555"/>
+
+                                            </ContextMenu>
+                                        </Border.ContextMenu>
+
                                         <ContentPresenter />
                                     </Border>
+
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter TargetName="Border" Property="Background" Value="#3E3E42"/>

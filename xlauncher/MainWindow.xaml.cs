@@ -14,8 +14,8 @@ namespace xlauncher
     {
         public ObservableCollection<ItemResult> Items { get; set; }
 
-        private readonly SolidColorBrush _violetaBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8A2BE2")); // Archivos normales
-        private readonly SolidColorBrush _historyBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5E5AEE")); // Historial (Violeta azulado)
+        private readonly SolidColorBrush _violetaBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8A2BE2"));
+        private readonly SolidColorBrush _historyBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5E5AEE"));
 
         private HistoryManager _historyManager;
         private bool _isNavigating = false;
@@ -23,11 +23,9 @@ namespace xlauncher
         public MainWindow()
         {
             InitializeComponent();
-
-            _historyManager = new HistoryManager(); // Cargar historial
+            _historyManager = new HistoryManager();
             Items = new ObservableCollection<ItemResult>();
             ResultList.ItemsSource = Items;
-
             InputBox.Focus();
         }
 
@@ -49,7 +47,6 @@ namespace xlauncher
                 return;
             }
 
-            // Normalizamos path para búsqueda en disco
             string pathProcesado = query;
             if (query.StartsWith("\\")) pathProcesado = "c:" + query;
 
@@ -60,26 +57,32 @@ namespace xlauncher
         {
             Items.Clear();
 
-            // 1. BUSCAR EN HISTORIAL (Primero)
-            // Solo buscamos en historial si el usuario NO está escribiendo una ruta compleja (con barras intermedias)
-            // o si queremos que busque por nombre de archivo simple (ej: "chrom" -> "chrome.exe")
+            // 1. HISTORIAL
             string nombreBusqueda = Path.GetFileName(queryOriginal);
             if (!string.IsNullOrEmpty(nombreBusqueda))
             {
                 var historyMatches = _historyManager.Search(nombreBusqueda);
                 foreach (var h in historyMatches)
                 {
+                    // Determinar el nombre a mostrar (Alias o Nombre real)
+                    string displayName = !string.IsNullOrEmpty(h.Alias) ? h.Alias : h.FileName;
+                    string suffix = !string.IsNullOrEmpty(h.Alias) ? " (Alias)" : " (Historial)";
+
                     Items.Add(new ItemResult
                     {
-                        Name = h.FileName + " (Historial)", // Agregamos sufijo visual opcional o lo dejamos limpio
+                        Name = displayName + suffix,
                         FullPath = h.FullPath,
                         Type = "History",
-                        ColorBrush = _historyBrush // Color Violeta-Azul distinto
+                        ColorBrush = _historyBrush,
+
+                        // Flags para el menu contextual
+                        IsHistoryItem = true,
+                        IsHistoryFile = !h.IsFolder // Solo renombramos archivos
                     });
                 }
             }
 
-            // 2. BUSCAR EN DISCO (Después)
+            // 2. DISCO
             try
             {
                 string directorioBusqueda = "";
@@ -99,17 +102,13 @@ namespace xlauncher
                 if (!string.IsNullOrEmpty(directorioBusqueda) && Directory.Exists(directorioBusqueda))
                 {
                     var dirInfo = new DirectoryInfo(directorioBusqueda);
-                    // Usamos EnumerationOptions para manejar errores de acceso de forma más limpia en .NET Core/5+
-                    // Si usas .NET Framework viejo, el try-catch externo ya lo cubre.
                     var fileSystemInfos = dirInfo.EnumerateFileSystemInfos($"{filtro}*");
 
                     int count = 0;
                     foreach (var item in fileSystemInfos)
                     {
-                        // Evitar duplicados si ya salió en el historial
                         if (Items.Any(x => x.FullPath == item.FullName)) continue;
-
-                        if (count >= 20) break; // Límite para rendimiento
+                        if (count >= 20) break;
 
                         bool isFolder = (item.Attributes & FileAttributes.Directory) == FileAttributes.Directory;
 
@@ -118,7 +117,11 @@ namespace xlauncher
                             Name = item.Name,
                             FullPath = item.FullName,
                             Type = isFolder ? "Folder" : "File",
-                            ColorBrush = _violetaBrush
+                            ColorBrush = _violetaBrush,
+
+                            // Flags para el menu contextual
+                            IsHistoryItem = false,
+                            IsHistoryFile = false
                         });
                         count++;
                     }
@@ -126,39 +129,50 @@ namespace xlauncher
             }
             catch { }
 
-            // Seleccionar automáticamente el primer elemento
             if (Items.Count > 0) ResultList.SelectedIndex = 0;
         }
 
-        // --- TECLADO ---
+        // --- MENU CONTEXTUAL ---
+
+        private void Rename_Click(object sender, RoutedEventArgs e)
+        {
+            if (ResultList.SelectedItem is ItemResult selectedItem)
+            {
+                // Limpiamos el nombre para mostrar en el input (quitamos "(Historial)")
+                string rawName = selectedItem.Name.Replace(" (Historial)", "").Replace(" (Alias)", "").Trim();
+
+                RenameWindow rw = new RenameWindow(rawName);
+                // Centramos respecto a la app principal
+                rw.Owner = this;
+
+                if (rw.ShowDialog() == true)
+                {
+                    // Actualizamos en la BD
+                    _historyManager.UpdateAlias(selectedItem.FullPath, rw.NewName);
+                    // Refrescamos la lista para ver el cambio
+                    InputBox_TextChanged(null, null);
+                }
+            }
+        }
+
+        private void Delete_Click(object sender, RoutedEventArgs e)
+        {
+            if (ResultList.SelectedItem is ItemResult selectedItem)
+            {
+                _historyManager.Remove(selectedItem.FullPath);
+                InputBox_TextChanged(null, null); // Refrescar lista
+            }
+        }
+
+        // --- TECLADO / EJECUCIÓN ---
 
         private void InputBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
-            {
-                Application.Current.Shutdown();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Down)
-            {
-                MoverSeleccion(1);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Up)
-            {
-                MoverSeleccion(-1);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Tab)
-            {
-                AutoCompletarSeleccion();
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Enter)
-            {
-                ProcesarEnter();
-                e.Handled = true;
-            }
+            if (e.Key == Key.Escape) { Application.Current.Shutdown(); e.Handled = true; }
+            else if (e.Key == Key.Down) { MoverSeleccion(1); e.Handled = true; }
+            else if (e.Key == Key.Up) { MoverSeleccion(-1); e.Handled = true; }
+            else if (e.Key == Key.Tab) { AutoCompletarSeleccion(); e.Handled = true; }
+            else if (e.Key == Key.Enter) { ProcesarEnter(); e.Handled = true; }
         }
 
         private void MoverSeleccion(int direccion)
@@ -177,18 +191,15 @@ namespace xlauncher
             {
                 _isNavigating = true;
 
-                // Lógica solicitada: TAB copia el PATH completo al input
-                if (item.Type == "History")
+                if (item.IsHistoryItem)
                 {
-                    // Si viene del historial, ponemos el path completo directo para ejecutar
                     InputBox.Text = item.FullPath;
                 }
                 else
                 {
-                    // Lógica visual para navegación de carpetas (\Windows...)
                     bool usarShortPath = InputBox.Text.StartsWith("\\");
                     if (usarShortPath && item.FullPath.Length > 2)
-                        InputBox.Text = item.FullPath.Substring(2); // Quita "c:"
+                        InputBox.Text = item.FullPath.Substring(2);
                     else
                         InputBox.Text = item.FullPath;
 
@@ -200,8 +211,6 @@ namespace xlauncher
 
                 InputBox.CaretIndex = InputBox.Text.Length;
                 _isNavigating = false;
-
-                // Refrescamos la lista para mostrar el contenido de la nueva ruta
                 InputBox_TextChanged(null, null);
             }
         }
@@ -210,7 +219,7 @@ namespace xlauncher
         {
             if (ResultList.SelectedItem is ItemResult item)
             {
-                if (item.Type == "Folder")
+                if (item.Type == "Folder" && !item.IsHistoryItem) // Si es carpeta de disco entramos
                 {
                     AutoCompletarSeleccion();
                 }
@@ -221,14 +230,11 @@ namespace xlauncher
             }
             else
             {
-                // Si el usuario dio enter sin seleccionar nada de la lista,
-                // intentamos ejecutar lo que haya escrito en el input
                 string manualPath = InputBox.Text;
                 if (manualPath.StartsWith("\\")) manualPath = "c:" + manualPath;
-
                 if (File.Exists(manualPath))
                 {
-                    EjecutarArchivo(new ItemResult { FullPath = manualPath, Type = "File" });
+                    EjecutarArchivo(new ItemResult { FullPath = manualPath, Type = "File", Name = Path.GetFileName(manualPath) });
                 }
             }
         }
@@ -237,10 +243,11 @@ namespace xlauncher
         {
             try
             {
-                // 1. Guardar en Historial antes de ejecutar
-                _historyManager.AddOrUpdate(item.FullPath);
+                // Detectar si es carpeta para marcarlo correctamente en historial
+                bool isFolder = Directory.Exists(item.FullPath);
 
-                // 2. Ejecutar
+                _historyManager.AddOrUpdate(item.FullPath, isFolder);
+
                 Process.Start(new ProcessStartInfo
                 {
                     FileName = item.FullPath,
@@ -251,7 +258,7 @@ namespace xlauncher
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Error al abrir: " + ex.Message);
+                MessageBox.Show("Error: " + ex.Message);
             }
         }
 
