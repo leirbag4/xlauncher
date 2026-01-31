@@ -97,6 +97,7 @@ namespace xlauncher
         {
             if (e.Key == Key.Escape)
             {
+                InputBox.Text = "";
                 // CAMBIO IMPORTANTE: Ocultar en vez de cerrar para seguir escuchando el atajo
                 this.Hide();
                 e.Handled = true;
