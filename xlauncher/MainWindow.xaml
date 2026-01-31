@@ -32,9 +32,9 @@
 
             <TextBox x:Name="InputBox"
                      Grid.Row="0"
-                     FontSize="24"
-                     FontWeight="Bold"
-                     Foreground="#8A2BE2" 
+                     FontSize="18" 
+                     FontWeight="Normal"
+                     Foreground="#BDA1EE" 
                      Background="#252526"
                      BorderThickness="0"
                      Padding="10"
@@ -97,7 +97,37 @@
                                             Background="Transparent">
 
                                         <Border.ContextMenu>
-                                            <ContextMenu Background="#252526" BorderBrush="#333" Foreground="White">
+                                            <ContextMenu>
+                                                <ContextMenu.Template>
+                                                    <ControlTemplate TargetType="ContextMenu">
+                                                        <Border Background="#252526" BorderBrush="#333333" BorderThickness="1" CornerRadius="4" Padding="4">
+                                                            <StackPanel IsItemsHost="True"/>
+                                                        </Border>
+                                                    </ControlTemplate>
+                                                </ContextMenu.Template>
+
+                                                <ContextMenu.Resources>
+                                                    <Style TargetType="MenuItem">
+                                                        <Setter Property="FontSize" Value="14"/>
+                                                        <Setter Property="Foreground" Value="#E0E0E0"/>
+                                                        <Setter Property="Margin" Value="0,2"/>
+                                                        <Setter Property="Cursor" Value="Hand"/>
+                                                        <Setter Property="Template">
+                                                            <Setter.Value>
+                                                                <ControlTemplate TargetType="MenuItem">
+                                                                    <Border x:Name="ItemBorder" Padding="15,8" Background="Transparent" CornerRadius="3">
+                                                                        <ContentPresenter ContentSource="Header" HorizontalAlignment="Left"/>
+                                                                    </Border>
+                                                                    <ControlTemplate.Triggers>
+                                                                        <Trigger Property="IsHighlighted" Value="True">
+                                                                            <Setter TargetName="ItemBorder" Property="Background" Value="#3E3E42"/>
+                                                                        </Trigger>
+                                                                    </ControlTemplate.Triggers>
+                                                                </ControlTemplate>
+                                                            </Setter.Value>
+                                                        </Setter>
+                                                    </Style>
+                                                </ContextMenu.Resources>
 
                                                 <ContextMenu.Style>
                                                     <Style TargetType="ContextMenu">
@@ -112,7 +142,7 @@
 
                                                 <MenuItem Header="Rename" Click="Rename_Click">
                                                     <MenuItem.Style>
-                                                        <Style TargetType="MenuItem">
+                                                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsHistoryFile}" Value="True">
@@ -123,7 +153,9 @@
                                                     </MenuItem.Style>
                                                 </MenuItem>
 
-                                                <MenuItem Header="Delete" Click="Delete_Click" Foreground="#FF5555"/>
+                                                <MenuItem Header="Delete" Click="Delete_Click">
+                                                    <Setter Property="Foreground" Value="#FF6666"/>
+                                                </MenuItem>
 
                                             </ContextMenu>
                                         </Border.ContextMenu>
@@ -133,7 +165,7 @@
 
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Border" Property="Background" Value="#3E3E42"/>
+                                            <Setter TargetName="Border" Property="Background" Value="#2A2232"/>
                                         </Trigger>
                                         <Trigger Property="IsMouseOver" Value="True">
                                             <Setter TargetName="Border" Property="Background" Value="#2D2D30"/>

@@ -14,9 +14,10 @@ namespace xlauncher
     {
         public ObservableCollection<ItemResult> Items { get; set; }
 
-        private readonly SolidColorBrush _violetaBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#8A2BE2"));
-        private readonly SolidColorBrush _historyBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5E5AEE"));
-
+        private readonly SolidColorBrush _violetaBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#B49AE2"));
+        //private readonly SolidColorBrush _historyBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5E5AEE"));
+        // Antes era #5E5AEE. Ahora usamos un tono que armoniza con el violeta oscuro
+        private readonly SolidColorBrush _historyBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7D46B7"));
         private HistoryManager _historyManager;
         private bool _isNavigating = false;
 
