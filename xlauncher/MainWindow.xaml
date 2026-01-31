@@ -13,7 +13,8 @@
         Background="Transparent"
         WindowStartupLocation="CenterScreen"
         Topmost="True"
-        ResizeMode="NoResize">
+        ResizeMode="NoResize"
+        ShowInTaskbar="False">
 
     <Border Background="#991E1E1E" 
             CornerRadius="10"
@@ -77,7 +78,6 @@
                                        FontSize="16" 
                                        Margin="0,0,10,0" 
                                        VerticalAlignment="Center"/>
-
                             <TextBlock Text="{Binding Name}" 
                                        Foreground="{Binding ColorBrush}" 
                                        FontSize="16" 
@@ -91,10 +91,7 @@
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Border" 
-                                            Padding="8" 
-                                            CornerRadius="5" 
-                                            Background="Transparent">
+                                    <Border x:Name="Border" Padding="8" CornerRadius="5" Background="Transparent">
 
                                         <Border.ContextMenu>
                                             <ContextMenu>
@@ -107,7 +104,7 @@
                                                 </ContextMenu.Template>
 
                                                 <ContextMenu.Resources>
-                                                    <Style TargetType="MenuItem">
+                                                    <Style x:Key="CleanMenuItemStyle" TargetType="MenuItem">
                                                         <Setter Property="FontSize" Value="14"/>
                                                         <Setter Property="Foreground" Value="#E0E0E0"/>
                                                         <Setter Property="Margin" Value="0,2"/>
@@ -142,7 +139,7 @@
 
                                                 <MenuItem Header="Rename" Click="Rename_Click">
                                                     <MenuItem.Style>
-                                                        <Style TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                                        <Style TargetType="MenuItem" BasedOn="{StaticResource CleanMenuItemStyle}">
                                                             <Setter Property="Visibility" Value="Collapsed"/>
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding IsHistoryFile}" Value="True">
@@ -153,16 +150,16 @@
                                                     </MenuItem.Style>
                                                 </MenuItem>
 
-                                                <MenuItem Header="Delete" Click="Delete_Click">
-                                                    <Setter Property="Foreground" Value="#FF6666"/>
-                                                </MenuItem>
+                                                <MenuItem Header="Delete" 
+                                                          Click="Delete_Click" 
+                                                          Foreground="#FF6666" 
+                                                          Style="{StaticResource CleanMenuItemStyle}"/>
 
                                             </ContextMenu>
                                         </Border.ContextMenu>
 
                                         <ContentPresenter />
                                     </Border>
-
                                     <ControlTemplate.Triggers>
                                         <Trigger Property="IsSelected" Value="True">
                                             <Setter TargetName="Border" Property="Background" Value="#AA2A2232"/>

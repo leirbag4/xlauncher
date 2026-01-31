@@ -3,11 +3,11 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices; // Necesario para Hotkey y Blur
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Interop;     // Necesario para Hotkey y Blur
+using System.Windows.Interop;
 using System.Windows.Media;
 
 namespace xlauncher
@@ -21,7 +21,7 @@ namespace xlauncher
 
         private HistoryManager _historyManager;
         private bool _isNavigating = false;
-        private IntPtr _windowHandle; // Para manejar el Hotkey
+        private IntPtr _windowHandle;
 
         public MainWindow()
         {
@@ -29,79 +29,124 @@ namespace xlauncher
             _historyManager = new HistoryManager();
             Items = new ObservableCollection<ItemResult>();
             ResultList.ItemsSource = Items;
-            InputBox.Focus();
+
+            this.Loaded += MainWindow_Loaded;
         }
 
-        // =========================================================
-        // 1. INICIALIZACIÓN Y REGISTRO DE HOTKEY Y BLUR
-        // =========================================================
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            // Inicializar Handle para usarlo luego
+            _windowHandle = new WindowInteropHelper(this).Handle;
+
+            string[] args = Environment.GetCommandLineArgs();
+            if (args.Contains("--startup"))
+            {
+                // Inicio silencioso
+                this.WindowState = WindowState.Minimized;
+                this.Hide();
+            }
+            else
+            {
+                // Inicio manual: Forzar aparición
+                ForceShow();
+            }
+        }
+
         protected override void OnSourceInitialized(EventArgs e)
         {
             base.OnSourceInitialized(e);
-
-            // 1. Activar Blur (lo que ya tenías)
             EnableBlur();
 
-            // 2. Registrar Hotkey Global
             _windowHandle = new WindowInteropHelper(this).Handle;
             HwndSource source = HwndSource.FromHwnd(_windowHandle);
             source.AddHook(HwndHook);
 
-            // Registro: ID=9000, MOD_ALT=0x0001, VK_SPACE=0x20
-            // Si prefieres ALT + Q, cambia VK_SPACE por 0x51 (Q)
-            RegisterHotKey(_windowHandle, HOTKEY_ID, MOD_ALT, VK_SPACE);
+            // REGISTRAR HOTKEY: ALT + Q (0x51)
+            RegisterHotKey(_windowHandle, HOTKEY_ID, MOD_ALT, VK_Q);
         }
 
         protected override void OnClosed(EventArgs e)
         {
-            // Limpiar Hotkey al cerrar real
             UnregisterHotKey(_windowHandle, HOTKEY_ID);
             base.OnClosed(e);
         }
 
-        // Escuchar mensajes de Windows para detectar el atajo
         private IntPtr HwndHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             const int WM_HOTKEY = 0x0312;
             if (msg == WM_HOTKEY && wParam.ToInt32() == HOTKEY_ID)
             {
-                ToggleWindow(); // Mostrar u ocultar
+                ToggleWindow();
                 handled = true;
             }
             return IntPtr.Zero;
         }
 
+        // =========================================================
+        // LÓGICA DE FUERZA BRUTA PARA EL FOCO (SOLUCIÓN AL FREEZE)
+        // =========================================================
+
         private void ToggleWindow()
         {
             if (this.Visibility == Visibility.Visible)
             {
-                this.Hide();
+                HideWindow();
             }
             else
             {
-                this.Show();
-                this.Activate();
-                this.Topmost = true;  // Asegurar que quede arriba
-                this.Topmost = false; // Truco para forzar foco a veces
-                this.Topmost = true;
-                InputBox.Focus();
-                InputBox.SelectAll();
+                ForceShow();
             }
         }
 
+        private void HideWindow()
+        {
+            InputBox.Text = "";
+            this.Hide();
+        }
+
+        private void ForceShow()
+        {
+            // 1. Mostrar ventana y restaurar si estaba minimizada
+            this.Show();
+            if (this.WindowState == WindowState.Minimized)
+                this.WindowState = WindowState.Normal;
+
+            // 2. Truco del Topmost para asegurar visibilidad
+            this.Topmost = false;
+            this.Topmost = true;
+
+            // 3. ACTIVAR EL MODO "ROBAR FOCO" (AttachThreadInput)
+            // Esto conecta nuestro teclado al proceso que tenga el foco actualmente
+            // para poder quitárselo legalmente.
+            uint foregroundThread = GetWindowThreadProcessId(GetForegroundWindow(), IntPtr.Zero);
+            uint appThread = GetCurrentThreadId();
+
+            if (foregroundThread != appThread)
+            {
+                AttachThreadInput(foregroundThread, appThread, true);
+
+                SetForegroundWindow(_windowHandle);
+                SetFocus(_windowHandle);
+
+                AttachThreadInput(foregroundThread, appThread, false); // Soltar
+            }
+            else
+            {
+                SetForegroundWindow(_windowHandle);
+            }
+
+            // 4. Activar WPF y el Input
+            this.Activate();
+            InputBox.Focus();
+        }
+
         // =========================================================
-        // LÓGICA PRINCIPAL (Modificada para usar Hide en vez de Shutdown)
+        // LÓGICA DE NEGOCIO
         // =========================================================
 
         private void InputBox_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.Escape)
-            {
-                InputBox.Text = "";
-                // CAMBIO IMPORTANTE: Ocultar en vez de cerrar para seguir escuchando el atajo
-                this.Hide();
-                e.Handled = true;
-            }
+            if (e.Key == Key.Escape) { HideWindow(); e.Handled = true; }
             else if (e.Key == Key.Down) { MoverSeleccion(1); e.Handled = true; }
             else if (e.Key == Key.Up) { MoverSeleccion(-1); e.Handled = true; }
             else if (e.Key == Key.Tab) { AutoCompletarSeleccion(); e.Handled = true; }
@@ -114,21 +159,14 @@ namespace xlauncher
             {
                 bool isFolder = Directory.Exists(item.FullPath);
                 _historyManager.AddOrUpdate(item.FullPath, isFolder);
-
                 Process.Start(new ProcessStartInfo { FileName = item.FullPath, UseShellExecute = true });
-
-                // CAMBIO IMPORTANTE: Ocultar tras ejecutar
-                this.Hide();
+                HideWindow();
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show("Error: " + ex.Message);
-            }
+            catch (Exception ex) { MessageBox.Show("Error: " + ex.Message); }
         }
 
         private void ProcesarEnter()
         {
-            // Pequeño truco: Comando 'exit' para cerrar la app de verdad
             if (InputBox.Text.ToLower() == "exit" || InputBox.Text.ToLower() == "/exit")
             {
                 Application.Current.Shutdown();
@@ -137,47 +175,24 @@ namespace xlauncher
 
             if (ResultList.SelectedItem is ItemResult item)
             {
-                if (item.Type == "Folder" && !item.IsHistoryItem)
-                {
-                    AutoCompletarSeleccion();
-                }
-                else
-                {
-                    EjecutarArchivo(item);
-                }
+                if (item.Type == "Folder" && !item.IsHistoryItem) AutoCompletarSeleccion();
+                else EjecutarArchivo(item);
             }
             else
             {
                 string manualPath = InputBox.Text;
                 if (manualPath.StartsWith("\\")) manualPath = "c:" + manualPath;
                 if (File.Exists(manualPath))
-                {
                     EjecutarArchivo(new ItemResult { FullPath = manualPath, Type = "File", Name = Path.GetFileName(manualPath) });
-                }
             }
-        }
-
-        // --- RESTO DE LÓGICA SIN CAMBIOS ---
-
-        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
-        {
-            base.OnMouseLeftButtonDown(e);
-            this.DragMove();
         }
 
         private void InputBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (_isNavigating) return;
             string query = InputBox.Text;
-
-            if (string.IsNullOrWhiteSpace(query))
-            {
-                Items.Clear();
-                return;
-            }
-
-            string pathProcesado = query;
-            if (query.StartsWith("\\")) pathProcesado = "c:" + query;
+            if (string.IsNullOrWhiteSpace(query)) { Items.Clear(); return; }
+            string pathProcesado = query.StartsWith("\\") ? "c:" + query : query;
             ActualizarListado(query, pathProcesado);
         }
 
@@ -291,11 +306,24 @@ namespace xlauncher
         }
 
         private void ResultList_PreviewKeyDown(object sender, KeyEventArgs e) { InputBox.Focus(); }
+        protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e) { base.OnMouseLeftButtonDown(e); this.DragMove(); }
+
 
         // =========================================================
-        // BLUR & HOTKEY HELPERS
+        // DLL IMPORTS (LO MÁS IMPORTANTE)
         // =========================================================
 
+        [DllImport("user32.dll")] private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
+        [DllImport("user32.dll")] private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
+        [DllImport("user32.dll")][return: MarshalAs(UnmanagedType.Bool)] static extern bool SetForegroundWindow(IntPtr hWnd);
+        [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+        [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr ProcessId);
+        [DllImport("user32.dll")] static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+        [DllImport("user32.dll")] static extern IntPtr SetFocus(IntPtr hWnd);
+        [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
+
+        // BLUR
+        [DllImport("user32.dll")] internal static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
         private void EnableBlur()
         {
             var windowHelper = new WindowInteropHelper(this);
@@ -312,24 +340,13 @@ namespace xlauncher
             Marshal.FreeHGlobal(accentPtr);
         }
 
-        [DllImport("user32.dll")]
-        private static extern bool RegisterHotKey(IntPtr hWnd, int id, uint fsModifiers, uint vk);
-        [DllImport("user32.dll")]
-        private static extern bool UnregisterHotKey(IntPtr hWnd, int id);
-        [DllImport("user32.dll")]
-        internal static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
-
-        // Constantes para Hotkey
         private const int HOTKEY_ID = 9000;
         private const uint MOD_ALT = 0x0001;
-        private const uint VK_SPACE = 0x20; // Tecla Espacio
-        // private const uint VK_Q = 0x51;  // Tecla Q (Por si quieres cambiarlo)
+        private const uint VK_Q = 0x51;
 
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct WindowCompositionAttributeData { public WindowCompositionAttribute Attribute; public IntPtr Data; public int SizeOfData; }
+        [StructLayout(LayoutKind.Sequential)] internal struct WindowCompositionAttributeData { public WindowCompositionAttribute Attribute; public IntPtr Data; public int SizeOfData; }
         internal enum WindowCompositionAttribute { WCA_ACCENT_POLICY = 19 }
         internal enum AccentState { ACCENT_DISABLED = 0, ACCENT_ENABLE_GRADIENT = 1, ACCENT_ENABLE_TRANSPARENTGRADIENT = 2, ACCENT_ENABLE_BLURBEHIND = 3, ACCENT_ENABLE_ACRYLICBLURBEHIND = 4, ACCENT_INVALID_STATE = 5 }
-        [StructLayout(LayoutKind.Sequential)]
-        internal struct AccentPolicy { public AccentState AccentState; public int AccentFlags; public int GradientColor; public int AnimationId; }
+        [StructLayout(LayoutKind.Sequential)] internal struct AccentPolicy { public AccentState AccentState; public int AccentFlags; public int GradientColor; public int AnimationId; }
     }
 }
