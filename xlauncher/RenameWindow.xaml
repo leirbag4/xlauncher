@@ -10,7 +10,7 @@
 
     <Window.Resources>
         <Style x:Key="CancelButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#333333"/>
+            <Setter Property="Background" Value="#99333333"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="Template">
                 <Setter.Value>
@@ -35,7 +35,7 @@
         </Style>
 
         <Style x:Key="SaveButtonStyle" TargetType="Button">
-            <Setter Property="Background" Value="#8A2BE2"/>
+            <Setter Property="Background" Value="#998A2BE2"/>
             <Setter Property="Foreground" Value="White"/>
             <Setter Property="FontWeight" Value="Bold"/>
             <Setter Property="Template">
@@ -61,14 +61,14 @@
         </Style>
     </Window.Resources>
 
-    <Border Background="#1E1E1E" CornerRadius="10" BorderBrush="#333333" BorderThickness="1" Margin="0,0,0,22">
+    <Border Background="#DD1E1E1E" CornerRadius="10" BorderBrush="#8A2BE2" BorderThickness="1" Margin="0,0,0,22">
         <StackPanel Margin="20,20,20,9">
-            <TextBlock Text="Rename shortcut" Foreground="White" FontWeight="Bold" FontSize="16" Margin="0,0,0,15"/>
+            <TextBlock Text="Rename shortcut" Foreground="#6670A2" FontWeight="Bold" FontSize="16" Margin="0,0,0,15"/>
 
             <TextBox x:Name="NameInput"
                      FontSize="16"
                      Background="#252526"
-                     Foreground="#8A2BE2"
+                     Foreground="#B49AE2"
                      FontWeight="Bold"
                      BorderBrush="#333333"
                      Padding="5"
