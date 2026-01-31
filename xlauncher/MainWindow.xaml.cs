@@ -3,9 +3,11 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices; // Necesario para el Blur
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Interop;     // Necesario para el Blur
 using System.Windows.Media;
 
 namespace xlauncher
@@ -15,9 +17,8 @@ namespace xlauncher
         public ObservableCollection<ItemResult> Items { get; set; }
 
         private readonly SolidColorBrush _violetaBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#B49AE2"));
-        //private readonly SolidColorBrush _historyBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#5E5AEE"));
-        // Antes era #5E5AEE. Ahora usamos un tono que armoniza con el violeta oscuro
         private readonly SolidColorBrush _historyBrush = new SolidColorBrush((Color)ColorConverter.ConvertFromString("#7D46B7"));
+
         private HistoryManager _historyManager;
         private bool _isNavigating = false;
 
@@ -29,6 +30,35 @@ namespace xlauncher
             ResultList.ItemsSource = Items;
             InputBox.Focus();
         }
+
+        // --- LÓGICA DEL BLUR (DIFUMINADO) ---
+        protected override void OnSourceInitialized(EventArgs e)
+        {
+            base.OnSourceInitialized(e);
+            EnableBlur();
+        }
+
+        private void EnableBlur()
+        {
+            var windowHelper = new WindowInteropHelper(this);
+            var accent = new AccentPolicy();
+            accent.AccentState = AccentState.ACCENT_ENABLE_BLURBEHIND; // Efecto Blur
+
+            var accentStructSize = Marshal.SizeOf(accent);
+
+            var accentPtr = Marshal.AllocHGlobal(accentStructSize);
+            Marshal.StructureToPtr(accent, accentPtr, false);
+
+            var data = new WindowCompositionAttributeData();
+            data.Attribute = WindowCompositionAttribute.WCA_ACCENT_POLICY;
+            data.SizeOfData = accentStructSize;
+            data.Data = accentPtr;
+
+            SetWindowCompositionAttribute(windowHelper.Handle, ref data);
+
+            Marshal.FreeHGlobal(accentPtr);
+        }
+        // -------------------------------------
 
         protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
         {
@@ -65,7 +95,6 @@ namespace xlauncher
                 var historyMatches = _historyManager.Search(nombreBusqueda);
                 foreach (var h in historyMatches)
                 {
-                    // Determinar el nombre a mostrar (Alias o Nombre real)
                     string displayName = !string.IsNullOrEmpty(h.Alias) ? h.Alias : h.FileName;
                     string suffix = !string.IsNullOrEmpty(h.Alias) ? " (Alias)" : " (Historial)";
 
@@ -75,10 +104,8 @@ namespace xlauncher
                         FullPath = h.FullPath,
                         Type = "History",
                         ColorBrush = _historyBrush,
-
-                        // Flags para el menu contextual
                         IsHistoryItem = true,
-                        IsHistoryFile = !h.IsFolder // Solo renombramos archivos
+                        IsHistoryFile = !h.IsFolder
                     });
                 }
             }
@@ -119,8 +146,6 @@ namespace xlauncher
                             FullPath = item.FullName,
                             Type = isFolder ? "Folder" : "File",
                             ColorBrush = _violetaBrush,
-
-                            // Flags para el menu contextual
                             IsHistoryItem = false,
                             IsHistoryFile = false
                         });
@@ -139,18 +164,13 @@ namespace xlauncher
         {
             if (ResultList.SelectedItem is ItemResult selectedItem)
             {
-                // Limpiamos el nombre para mostrar en el input (quitamos "(Historial)")
                 string rawName = selectedItem.Name.Replace(" (Historial)", "").Replace(" (Alias)", "").Trim();
-
                 RenameWindow rw = new RenameWindow(rawName);
-                // Centramos respecto a la app principal
                 rw.Owner = this;
 
                 if (rw.ShowDialog() == true)
                 {
-                    // Actualizamos en la BD
                     _historyManager.UpdateAlias(selectedItem.FullPath, rw.NewName);
-                    // Refrescamos la lista para ver el cambio
                     InputBox_TextChanged(null, null);
                 }
             }
@@ -161,7 +181,7 @@ namespace xlauncher
             if (ResultList.SelectedItem is ItemResult selectedItem)
             {
                 _historyManager.Remove(selectedItem.FullPath);
-                InputBox_TextChanged(null, null); // Refrescar lista
+                InputBox_TextChanged(null, null);
             }
         }
 
@@ -220,7 +240,7 @@ namespace xlauncher
         {
             if (ResultList.SelectedItem is ItemResult item)
             {
-                if (item.Type == "Folder" && !item.IsHistoryItem) // Si es carpeta de disco entramos
+                if (item.Type == "Folder" && !item.IsHistoryItem)
                 {
                     AutoCompletarSeleccion();
                 }
@@ -244,17 +264,9 @@ namespace xlauncher
         {
             try
             {
-                // Detectar si es carpeta para marcarlo correctamente en historial
                 bool isFolder = Directory.Exists(item.FullPath);
-
                 _historyManager.AddOrUpdate(item.FullPath, isFolder);
-
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = item.FullPath,
-                    UseShellExecute = true
-                });
-
+                Process.Start(new ProcessStartInfo { FileName = item.FullPath, UseShellExecute = true });
                 Application.Current.Shutdown();
             }
             catch (Exception ex)
@@ -266,6 +278,45 @@ namespace xlauncher
         private void ResultList_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             InputBox.Focus();
+        }
+
+        // =========================================================
+        // ESTRUCTURAS DE WINDOWS API PARA EL EFECTO BLUR
+        // =========================================================
+
+        [DllImport("user32.dll")]
+        internal static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct WindowCompositionAttributeData
+        {
+            public WindowCompositionAttribute Attribute;
+            public IntPtr Data;
+            public int SizeOfData;
+        }
+
+        internal enum WindowCompositionAttribute
+        {
+            WCA_ACCENT_POLICY = 19
+        }
+
+        internal enum AccentState
+        {
+            ACCENT_DISABLED = 0,
+            ACCENT_ENABLE_GRADIENT = 1,
+            ACCENT_ENABLE_TRANSPARENTGRADIENT = 2,
+            ACCENT_ENABLE_BLURBEHIND = 3, // Efecto Aero/Blur clásico
+            ACCENT_ENABLE_ACRYLICBLURBEHIND = 4, // Efecto acrílico (Win10+)
+            ACCENT_INVALID_STATE = 5
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        internal struct AccentPolicy
+        {
+            public AccentState AccentState;
+            public int AccentFlags;
+            public int GradientColor;
+            public int AnimationId;
         }
     }
 }
